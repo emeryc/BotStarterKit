@@ -1,0 +1,3 @@
+{
+  "app": "npx ts-node bin/point6_deploy.ts"
+}

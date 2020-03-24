@@ -1,0 +1,3 @@
+[workspace]
+
+members = ["point6_slack", "slevr", "big_hero_echo"]

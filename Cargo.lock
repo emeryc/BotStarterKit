@@ -99,8 +99,14 @@ checksum = "7d5ca2cd0adc3f48f9e9ea5a6bbdf9ccc0bfade884847e484d452414c7ccffb3"
 name = "big_hero_echo"
 version = "0.1.0"
 dependencies = [
+ "futures",
+ "hyper",
+ "hyper-rustls",
  "lambda",
  "log",
+ "rusoto_core",
+ "rusoto_dynamodb",
+ "rusoto_secretsmanager",
  "serde",
  "serde_json",
  "simple_logger",
@@ -1021,6 +1027,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "rusoto_dynamodb"
+version = "0.43.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "686192bf4c9dbaa4514e9eed71c082b6a62ab458a20dec944ed245b731bbf0d3"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "futures",
+ "rusoto_core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "rusoto_secretsmanager"
+version = "0.43.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8c0266817051cc2e4a01f8129146c6d8f194b500fd6e689495f33946ff290141"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "futures",
+ "rusoto_core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "rusoto_signature"
 version = "0.43.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1285,6 +1319,9 @@ checksum = "c111b5bd5695e56cffe5129854aa230b39c93a305372fdbb2668ca2394eea9f8"
 name = "slevr"
 version = "0.1.0"
 dependencies = [
+ "hyper",
+ "hyper-rustls",
+ "log",
  "serde",
  "serde_json",
 ]

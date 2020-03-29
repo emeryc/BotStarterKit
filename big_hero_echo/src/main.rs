@@ -1,40 +1,18 @@
+use futures::future::join_all;
 use lambda::handler_fn;
 use log::debug;
-use serde_json::Value;
+use rusoto_core::Region;
+use rusoto_secretsmanager::{GetSecretValueRequest, SecretsManager, SecretsManagerClient};
 use simple_logger;
+use slevr::{InnerEvent, OuterEvent, SlackApiClient};
+use std::future::Future;
 use tokio;
 
-// {
-//     "Records": [
-//       {
-//         "EventVersion": "1.0",
-//         "EventSubscriptionArn": "arn:aws:sns:us-east-2:123456789012:sns-lambda:21be56ed-a058-49f5-8c98-aedd2564c486",
-//         "EventSource": "aws:sns",
-//         "Sns": {
-//           "SignatureVersion": "1",
-//           "Timestamp": "2019-01-02T12:45:07.000Z",
-//           "Signature": "tcc6faL2yUC6dgZdmrwh1Y4cGa/ebXEkAi6RibDsvpi+tE/1+82j...65r==",
-//           "SigningCertUrl": "https://sns.us-east-2.amazonaws.com/SimpleNotificationService-ac565b8b1a6c5d002d285f9598aa1d9b.pem",
-//           "MessageId": "95df01b4-ee98-5cb9-9903-4c221d41eb5e",
-//           "Message": "Hello from SNS!",
-//           "MessageAttributes": {
-//             "Test": {
-//               "Type": "String",
-//               "Value": "TestString"
-//             },
-//             "TestBinary": {
-//               "Type": "Binary",
-//               "Value": "TestBinary"
-//             }
-//           },
-//           "Type": "Notification",
-//           "UnsubscribeUrl": "https://sns.us-east-2.amazonaws.com/?Action=Unsubscribe&amp;SubscriptionArn=arn:aws:sns:us-east-2:123456789012:test-lambda:21be56ed-a058-49f5-8c98-aedd2564c486",
-//           "TopicArn":"arn:aws:sns:us-east-2:123456789012:sns-lambda",
-//           "Subject": "TestInvoke"
-//         }
-//       }
-//     ]
-//   }
+mod sns;
+use sns::SNSMessage;
+
+mod dynamo;
+use dynamo::EchoTabel;
 
 type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
 
@@ -45,7 +23,99 @@ async fn main() -> Result<(), Error> {
     Ok(())
 }
 
-async fn func(request: Value) -> Result<String, Error> {
-    debug!("{:#?}", request);
+async fn func(message: SNSMessage) -> Result<String, Error> {
+    debug!("{:#?}", message);
+
+    let slack_client = SlackApiClient::new(&{
+        let secrets_manager = SecretsManagerClient::new(Region::UsWest1);
+        secrets_manager
+            .get_secret_value(GetSecretValueRequest {
+                secret_id: "SlackClientSecret08B328AB-55ENGjJh0rOK".to_string(),
+                version_id: None,
+                version_stage: None,
+            })
+            .await?
+            .secret_string
+            .unwrap()
+    });
+
+    let echo_tabel = EchoTabel::new();
+
+    let slack_message_str = &message.records.first().unwrap().sns.message[..];
+    let slack_message = serde_json::from_str::<OuterEvent>(slack_message_str);
+
+    if let Ok(OuterEvent::EventCallback {
+        event:
+            InnerEvent::Message {
+                channel,
+                user,
+                text,
+                channel_type,
+                ..
+            },
+        ..
+    }) = slack_message
+    {
+        match (&channel_type[..], &text[..]) {
+            ("im", "echo all") => {
+                let result = slack_client
+                    .chat_post_message(slevr::chat::post_message::ChatMessage {
+                        channel,
+                        text: match echo_tabel.add_listener(user).await {
+                            Ok(_) => "I\'ll now echo everything to you",
+                            Err(_) => "Got an error",
+                        }
+                        .to_string(),
+                        ..Default::default()
+                    })
+                    .await;
+                debug!("{:?}", result);
+            }
+            ("im", "echo none") => {
+                // remove user from dynamo!
+                let result = slack_client
+                    .chat_post_message(slevr::chat::post_message::ChatMessage {
+                        channel,
+                        text: match echo_tabel.remove_listener(user).await {
+                            Ok(_) => "You have been unsubscribed",
+                            Err(_) => "Couldn't remove you",
+                        }
+                        .to_string(),
+                        ..Default::default()
+                    })
+                    .await;
+                debug!("{:?}", result);
+            }
+            ("im", "help") => {
+                let result = slack_client
+                    .chat_post_message(slevr::chat::post_message::ChatMessage {
+                        channel,
+                        text: " You can ask me to send you messages. 
+                        I can either echo everything to you, by you IMing me `echo all`
+                        or I can send nothing to you, if you IM me `echo none`."
+                            .to_string(),
+                        ..Default::default()
+                    })
+                    .await;
+                debug!("{:?}", result);
+            }
+            _ => (),
+        }
+    }
+    let messages = echo_tabel
+        .get_listeners()
+        .await
+        .into_iter()
+        .map(|user| {
+            let chat_message = slevr::chat::post_message::ChatMessage {
+                channel: user,
+                text: slack_message_str.to_string(),
+                ..Default::default()
+            };
+            slack_client.chat_post_message(chat_message)
+        })
+        .collect::<Vec<_>>();
+    join_all(messages).await;
+
     Ok("Success".into())
 }

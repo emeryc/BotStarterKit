@@ -5,7 +5,7 @@ deploy : build build_cdk
 	cd point6_deploy && cdk deploy
 
 build_cdk : 
-	cd point6_deploy && npm run build
+	cd point6_deploy && yarn run build
 
 build : compile slack_incoming_handler big_hero_echo
 
@@ -20,3 +20,6 @@ slack_incoming_handler : compile
 
 clean :
 	cargo clean
+
+deps :
+	cd point6_deploy && yarn install

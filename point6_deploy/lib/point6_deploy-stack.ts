@@ -5,6 +5,7 @@ import * as subs from "@aws-cdk/aws-sns-subscriptions";
 import * as lambda from "@aws-cdk/aws-lambda";
 import * as iam from "@aws-cdk/aws-iam";
 import * as secretManager from "@aws-cdk/aws-secretsmanager"
+import * as dynamodb from "@aws-cdk/aws-dynamodb"
 
 export class Point6DeployStack extends cdk.Stack {
   constructor(scope: cdk.Construct, id: string, props?: cdk.StackProps) {
@@ -45,12 +46,18 @@ export class Point6DeployStack extends cdk.Stack {
 
     const clientSecret = new secretManager.Secret(this, "SlackClientSecret")
 
+    const echoTable = new dynamodb.Table(this, "BigHeroEchoTable", {
+      partitionKey: { type: dynamodb.AttributeType.STRING, name: "SlackUserId" },
+      tableName: "bhp6_echo_v1",
+    })
+
     const bigHeroEcho = new lambda.Function(this, "BigHeroEcho", {
       runtime: lambda.Runtime.PROVIDED,
       code: lambda.Code.fromAsset("../target/x86_64-unknown-linux-musl/release/big_hero_echo.zip"),
       handler: "ignored"
     })
     clientSecret.grantRead(bigHeroEcho)
+    echoTable.grantReadWriteData(bigHeroEcho)
 
     messages.addSubscription(new subs.LambdaSubscription(bigHeroEcho, {}));
 

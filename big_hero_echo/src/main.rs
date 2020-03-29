@@ -3,9 +3,9 @@ use lambda::handler_fn;
 use log::debug;
 use rusoto_core::Region;
 use rusoto_secretsmanager::{GetSecretValueRequest, SecretsManager, SecretsManagerClient};
+use serde_json::{from_str, Value};
 use simple_logger;
 use slevr::{InnerEvent, OuterEvent, SlackApiClient};
-use std::future::Future;
 use tokio;
 
 mod sns;
@@ -102,6 +102,7 @@ async fn func(message: SNSMessage) -> Result<String, Error> {
             _ => (),
         }
     }
+    let val: Value = from_str(slack_message_str).unwrap();
     let messages = echo_tabel
         .get_listeners()
         .await
@@ -109,7 +110,7 @@ async fn func(message: SNSMessage) -> Result<String, Error> {
         .map(|user| {
             let chat_message = slevr::chat::post_message::ChatMessage {
                 channel: user,
-                text: slack_message_str.to_string(),
+                text: format!("```{:#?}```", val),
                 ..Default::default()
             };
             slack_client.chat_post_message(chat_message)
